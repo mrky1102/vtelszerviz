@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import sqlite3
 import pandas as pd
 from fpdf import FPDF
@@ -12,6 +13,9 @@ import os
 
 # --- KONFIGURÁCIÓ ---
 st.set_page_config(page_title="V-Tel GSM Szerviz", layout="wide")
+
+# Kapcsolódás a Google Táblázathoz
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- KOMPAKT STÍLUS BEÁLLÍTÁSA ---
 st.markdown("""
