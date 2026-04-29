@@ -12,7 +12,7 @@ from email import encoders
 # --- KONFIGURÁCIÓ ---
 st.set_page_config(page_title="V-Tel GSM Szerviz", layout="wide")
 
-# Google Sheets kapcsolat
+# Kapcsolódás a Google Táblázathoz (Service Account kényszerítése)
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- STÍLUS ---
@@ -59,13 +59,14 @@ def create_pdf(row):
 
 # --- ADATOK BETÖLTÉSE ---
 try:
+    # Service account használata esetén a read metódus behúzza az adatokat
     df = conn.read(ttl=0)
-    # Biztonsági mentés: minden oszlopnevet kisbetűssé alakítunk
+    # Kisbetűsítjük az oszlopneveket a biztonság kedvéért
     df.columns = [str(c).lower() for c in df.columns]
     if not df.empty:
         df['id'] = pd.to_numeric(df['id'], errors='coerce')
 except Exception as e:
-    st.error("Hiba a táblázat beolvasásakor. Ellenőrizze a Secrets-t!")
+    st.error(f"Hiba a táblázat beolvasásakor: {e}")
     df = pd.DataFrame(columns=['id', 'ugyfel', 'email', 'tipus', 'imei', 'hiba', 'statusz'])
 
 # --- FŐOLDAL ---
@@ -87,16 +88,18 @@ if st.session_state.show_form:
         
         if st.form_submit_button("Mentés"):
             if u_n and u_t:
+                # Automata ID generálás
                 new_id = int(df['id'].max()) + 1 if not df.empty and not df['id'].isnull().all() else 1
                 new_row = pd.DataFrame([{"id": new_id, "ugyfel": u_n, "email": u_e, "tipus": u_t, "imei": u_i, "hiba": u_h, "statusz": u_s}])
                 updated_df = pd.concat([df, new_row], ignore_index=True)
                 try:
+                    # Mentés a Service Account jogosultságával
                     conn.update(data=updated_df)
                     st.success("Sikeres mentés!")
                     st.session_state.show_form = False
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Hiba az írásnál! Állítsa a táblázatot SZERKESZTŐ módba! {e}")
+                    st.error(f"Hiba a mentés során: {e}")
 
 st.divider()
 
@@ -109,18 +112,21 @@ if not df.empty:
     edited_df = st.data_editor(df_display, use_container_width=True, hide_index=True)
     
     if st.button("Módosítások mentése"):
+        # Frissítés az ID alapján
         for index, row in edited_df.iterrows():
             df.loc[df['id'] == row['id']] = row
-        conn.update(data=df)
-        st.success("Adatok szinkronizálva!")
-        st.rerun()
+        try:
+            conn.update(data=df)
+            st.success("Adatok szinkronizálva!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Mentési hiba: {e}")
 
     st.divider()
     
     st.subheader("Műveletek")
     main_col1, _ = st.columns([2, 2])
     with main_col1:
-        # ID-k listája a választóhoz
         valid_ids = df_display['id'].dropna().tolist()
         if valid_ids:
             sel_id = st.selectbox("Munkalap választása (ID):", valid_ids)
@@ -151,15 +157,18 @@ if not df.empty:
                                     msg.attach(part)
                                 server = smtplib.SMTP("smtp.gmail.com", 587); server.starttls()
                                 server.login(S_EMAIL, S_PASS); server.send_message(msg); server.quit()
-                                st.success("Küldve!")
-                            else: st.error("Nincs email.")
-                        else: st.error("Hiányzó Secrets!")
+                                st.success("Email elküldve!")
+                            else: st.error("Nincs email cím!")
+                        else: st.error("Hiányzó Secrets beállítások!")
                     except Exception as e: st.error(f"Email hiba: {e}")
             
             with btn_c3:
                 if st.button("🗑️ Törlés", type="primary"):
                     df = df[df['id'] != sel_id]
-                    conn.update(data=df)
-                    st.rerun()
+                    try:
+                        conn.update(data=df)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Törlési hiba: {e}")
 else:
     st.info("Nincs adat.")
